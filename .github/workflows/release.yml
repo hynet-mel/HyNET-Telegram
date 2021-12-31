@@ -257,8 +257,10 @@ jobs:
       matrix:
         flavor:
           - FullRelease
+          - FullFoss
           - FullReleaseNoGcm
           - MiniRelease
+          - MiniFoss
           - MiniReleaseNoGcm
     steps:
       - name: Checkout
@@ -380,8 +382,10 @@ jobs:
             done
           }
           upload apks/NekoX-mini-*-release.apk
+          upload apks/NekoX-mini-*-foss.apk
           upload apks/NekoX-mini-*-releaseNoGcm.apk
           upload apks/NekoX-full-*-release.apk
+          upload apks/NekoX-full-*-foss.apk
           upload apks/NekoX-full-*-releaseNoGcm.apk
   play:
     name: Publish to Play Store
