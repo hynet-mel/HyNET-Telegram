@@ -258,8 +258,10 @@ jobs:
         flavor:
           - FullRelease
           - FullReleaseNoGcm
+          - FullFoss
           - MiniRelease
           - MiniReleaseNoGcm
+          - MiniFoss
     steps:
       - name: Checkout
         uses: actions/checkout@v2
