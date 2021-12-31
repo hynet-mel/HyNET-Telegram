@@ -256,10 +256,9 @@ jobs:
     strategy:
       matrix:
         flavor:
-          - FullRelease
           - FullReleaseNoGcm
-          - MiniRelease
           - MiniReleaseNoGcm
+          - MiniFoss
     steps:
       - name: Checkout
         uses: actions/checkout@v2
@@ -379,10 +378,7 @@ jobs:
                 --silent --show-error --fail >/dev/null
             done
           }
-          upload apks/NekoX-mini-*-release.apk
-          upload apks/NekoX-mini-*-releaseNoGcm.apk
-          upload apks/NekoX-full-*-release.apk
-          upload apks/NekoX-full-*-releaseNoGcm.apk
+          for i in apks/*; do upload $i; done
   play:
     name: Publish to Play Store
     if: github.event.inputs.play != 'y'
