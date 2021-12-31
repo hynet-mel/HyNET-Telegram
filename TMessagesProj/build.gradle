@@ -413,6 +413,10 @@ android {
             task.enabled = false
         } else if (task.name.endsWith("GoogleServices") && task.name.contains("NoGcm")) {
             task.enabled = false
+        } else if (task.name.contains("Crashlytics") && task.name.contains("Foss")) {
+            task.enabled = false
+        } else if (task.name.endsWith("GoogleServices") && task.name.contains("Foss")) {
+            task.enabled = false
         }
     }
 
