@@ -59,17 +59,13 @@ import java.util.Collections;
 import java.util.GregorianCalendar;
 import java.util.HashMap;
 import java.util.List;
-import java.util.Stack;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 import cn.hutool.core.util.StrUtil;
-import tw.nekomimi.nkmr.NekomuraConfig;
+import tw.nekomimi.nekogram.NekoConfig;
 import tw.nekomimi.nekogram.NekoXConfig;
-
-import androidx.collection.LongSparseArray;
-import androidx.core.math.MathUtils;
 
 public class MessageObject {
 
@@ -102,9 +98,9 @@ public class MessageObject {
     public CharSequence caption;
     public MessageObject replyMessageObject;
     public int type = 1000;
-    public boolean reactionsVisibleOnScreen;
     public long reactionsLastCheckTime;
     public String customName;
+    public boolean reactionsChanged;
     private int isRoundVideoCached;
     public long eventId;
     public int contentType;
@@ -138,7 +134,7 @@ public class MessageObject {
     public boolean isRestrictedMessage;
     public long loadedFileSize;
 
-    public boolean isSpoilersRevealed;
+    public boolean isSpoilersRevealed = NekoConfig.showSpoilersDirectly.Bool();
     public byte[] sponsoredId;
     public int sponsoredChannelPost;
     public TLRPC.ChatInvite sponsoredChatInvite;
@@ -3047,7 +3043,7 @@ public class MessageObject {
         } else {
             isRestrictedMessage = false;
             String restrictionReason = MessagesController.getRestrictionReason(messageOwner.restriction_reason);
-            if (!TextUtils.isEmpty(restrictionReason) && !NekomuraConfig.ignoreContentRestrictions.Bool()) {
+            if (!TextUtils.isEmpty(restrictionReason) && !NekoConfig.ignoreContentRestrictions.Bool()) {
                 messageText = restrictionReason;
                 isRestrictedMessage = true;
             } else if (!isMediaEmpty()) {
@@ -6327,6 +6323,7 @@ public class MessageObject {
                     }
                 }
             }
+            reactionsChanged = true;
             return false;
         }
 
@@ -6360,6 +6357,7 @@ public class MessageObject {
             action.user_id = UserConfig.getInstance(currentAccount).getClientUserId();
             action.reaction = reaction;
         }
+        reactionsChanged = true;
         return true;
     }
 }
