@@ -87,6 +87,7 @@ import tw.nekomimi.nekogram.NekoConfig;
 
 public class DialogCell extends BaseCell {
 
+    public boolean drawingForBlur;
     boolean moving;
     private RLottieDrawable lastDrawTranslationDrawable;
     private int lastDrawSwipeMessageStringId;
@@ -1357,7 +1358,7 @@ public class DialogCell extends BaseCell {
                     } else {
                         drawMention = false;
                     }
-                    if (reactionMentionCount != 0) {
+                    if (reactionMentionCount > 0) {
                         drawReactionMention = true;
                     } else {
                         drawReactionMention = false;
@@ -2414,10 +2415,12 @@ public class DialogCell extends BaseCell {
         boolean needInvalidate = false;
 
         if (currentDialogFolderId != 0 && archivedChatsDrawable != null && archivedChatsDrawable.outProgress == 0.0f && translationX == 0.0f) {
-            canvas.save();
-            canvas.clipRect(0, 0, getMeasuredWidth(), getMeasuredHeight());
-            archivedChatsDrawable.draw(canvas);
-            canvas.restore();
+            if (!drawingForBlur) {
+                canvas.save();
+                canvas.clipRect(0, 0, getMeasuredWidth(), getMeasuredHeight());
+                archivedChatsDrawable.draw(canvas);
+                canvas.restore();
+            }
             return;
         }
 
@@ -2433,10 +2436,10 @@ public class DialogCell extends BaseCell {
             canvas.clipRect(0, topClip * clipProgress, getMeasuredWidth(), getMeasuredHeight() - (int) (bottomClip * clipProgress));
         }
 
+        int backgroundColor = 0;
         if (translationX != 0 || cornerProgress != 0.0f) {
             canvas.save();
             String swipeMessage;
-            int backgroundColor;
             int revealBackgroundColor;
             int swipeMessageStringId;
             if (currentDialogFolderId != 0) {
@@ -2607,8 +2610,10 @@ public class DialogCell extends BaseCell {
             canvas.translate(translationX, 0);
         }
 
+        float cornersRadius = AndroidUtilities.dp(8) * cornerProgress;
         if (isSelected) {
-            canvas.drawRect(0, 0, getMeasuredWidth(), getMeasuredHeight(), Theme.dialogs_tabletSeletedPaint);
+            rect.set(0, 0, getMeasuredWidth(), getMeasuredHeight());
+            canvas.drawRoundRect(rect, cornersRadius, cornersRadius, Theme.dialogs_tabletSeletedPaint);
         }
         if (currentDialogFolderId != 0 && (!SharedConfig.archiveHidden || archiveBackgroundProgress != 0)) {
             Theme.dialogs_pinnedPaint.setColor(AndroidUtilities.getOffsetColor(0, Theme.getColor(Theme.key_chats_pinnedOverlay, resourcesProvider), archiveBackgroundProgress, 1.0f));
@@ -2623,14 +2628,18 @@ public class DialogCell extends BaseCell {
 
             Theme.dialogs_pinnedPaint.setColor(Theme.getColor(Theme.key_windowBackgroundWhite, resourcesProvider));
             rect.set(getMeasuredWidth() - AndroidUtilities.dp(64), 0, getMeasuredWidth(), getMeasuredHeight());
-            canvas.drawRoundRect(rect, AndroidUtilities.dp(8) * cornerProgress, AndroidUtilities.dp(8) * cornerProgress, Theme.dialogs_pinnedPaint);
+            canvas.drawRoundRect(rect, cornersRadius, cornersRadius, Theme.dialogs_pinnedPaint);
+
+            if (isSelected) {
+                canvas.drawRoundRect(rect, cornersRadius, cornersRadius, Theme.dialogs_tabletSeletedPaint);
+            }
 
             if (currentDialogFolderId != 0 && (!SharedConfig.archiveHidden || archiveBackgroundProgress != 0)) {
                 Theme.dialogs_pinnedPaint.setColor(AndroidUtilities.getOffsetColor(0, Theme.getColor(Theme.key_chats_pinnedOverlay, resourcesProvider), archiveBackgroundProgress, 1.0f));
-                canvas.drawRoundRect(rect, AndroidUtilities.dp(8) * cornerProgress, AndroidUtilities.dp(8) * cornerProgress, Theme.dialogs_pinnedPaint);
+                canvas.drawRoundRect(rect, cornersRadius, cornersRadius, Theme.dialogs_pinnedPaint);
             } else if (drawPin || drawPinBackground) {
                 Theme.dialogs_pinnedPaint.setColor(Theme.getColor(Theme.key_chats_pinnedOverlay, resourcesProvider));
-                canvas.drawRoundRect(rect, AndroidUtilities.dp(8) * cornerProgress, AndroidUtilities.dp(8) * cornerProgress, Theme.dialogs_pinnedPaint);
+                canvas.drawRoundRect(rect, cornersRadius, cornersRadius, Theme.dialogs_pinnedPaint);
             }
             canvas.restore();
         }
@@ -2716,18 +2725,23 @@ public class DialogCell extends BaseCell {
             }
             canvas.save();
             canvas.translate(messageLeft, messageTop);
-            try {
-                canvas.save();
-                SpoilerEffect.clipOutCanvas(canvas, spoilers);
-                messageLayout.draw(canvas);
-                canvas.restore();
+            if (!spoilers.isEmpty()) {
+                try {
+                    canvas.save();
+                    SpoilerEffect.clipOutCanvas(canvas, spoilers);
+                    messageLayout.draw(canvas);
+                    canvas.restore();
 
-                for (SpoilerEffect eff : spoilers) {
-                    eff.setColor(messageLayout.getPaint().getColor());
-                    eff.draw(canvas);
+                    for (int i = 0; i < spoilers.size(); i++) {
+                        SpoilerEffect eff = spoilers.get(i);
+                        eff.setColor(messageLayout.getPaint().getColor());
+                        eff.draw(canvas);
+                    }
+                } catch (Exception e) {
+                    FileLog.e(e);
                 }
-            } catch (Exception e) {
-                FileLog.e(e);
+            } else {
+                messageLayout.draw(canvas);
             }
             canvas.restore();
 
@@ -3308,7 +3322,6 @@ public class DialogCell extends BaseCell {
     public boolean hasOverlappingRendering() {
         return false;
     }
-
     @Override
     public void onInitializeAccessibilityNodeInfo(AccessibilityNodeInfo info) {
         super.onInitializeAccessibilityNodeInfo(info);
@@ -3317,83 +3330,79 @@ public class DialogCell extends BaseCell {
         } else {
             info.addAction(AccessibilityNodeInfo.ACTION_CLICK);
             info.addAction(AccessibilityNodeInfo.ACTION_LONG_CLICK);
-        }
-    }
-
-    @Override
-    public void onPopulateAccessibilityEvent(AccessibilityEvent event) {
-        super.onPopulateAccessibilityEvent(event);
-        StringBuilder sb = new StringBuilder();
-        if (currentDialogFolderId == 1) {
-            sb.append(LocaleController.getString("ArchivedChats", R.string.ArchivedChats));
-            sb.append(". ");
-        } else {
-            if (encryptedChat != null) {
-                sb.append(LocaleController.getString("AccDescrSecretChat", R.string.AccDescrSecretChat));
+            if (checkBox != null) info.setSelected(checkBox.isChecked());
+            StringBuilder sb = new StringBuilder();
+            if (currentDialogFolderId == 1) {
+                sb.append(LocaleController.getString("ArchivedChats", R.string.ArchivedChats));
                 sb.append(". ");
-            }
-            if (user != null) {
-                if (UserObject.isReplyUser(user)) {
-                    sb.append(LocaleController.getString("RepliesTitle", R.string.RepliesTitle));
-                } else {
-                    if (user.bot) {
-                        sb.append(LocaleController.getString("Bot", R.string.Bot));
-                        sb.append(". ");
-                    }
-                    if (user.self) {
-                        sb.append(LocaleController.getString("SavedMessages", R.string.SavedMessages));
-                    } else {
-                        sb.append(ContactsController.formatName(user.first_name, user.last_name));
-                    }
-                }
-                sb.append(". ");
-            } else if (chat != null) {
-                if (chat.broadcast) {
-                    sb.append(LocaleController.getString("AccDescrChannel", R.string.AccDescrChannel));
-                } else {
-                    sb.append(LocaleController.getString("AccDescrGroup", R.string.AccDescrGroup));
-                }
-                sb.append(". ");
-                sb.append(chat.title);
-                sb.append(". ");
-            }
-        }
-        if (unreadCount > 0) {
-            sb.append(LocaleController.formatPluralString("NewMessages", unreadCount));
-            sb.append(". ");
-        }
-        if (message == null || currentDialogFolderId != 0) {
-            event.setContentDescription(sb.toString());
-            return;
-        }
-        int lastDate = lastMessageDate;
-        if (lastMessageDate == 0) {
-            lastDate = message.messageOwner.date;
-        }
-        String date = LocaleController.formatDateAudio(lastDate, true);
-        if (message.isOut()) {
-            sb.append(LocaleController.formatString("AccDescrSentDate", R.string.AccDescrSentDate, date));
-        } else {
-            sb.append(LocaleController.formatString("AccDescrReceivedDate", R.string.AccDescrReceivedDate, date));
-        }
-        sb.append(". ");
-        if (chat != null && !message.isOut() && message.isFromUser() && message.messageOwner.action == null) {
-            TLRPC.User fromUser = MessagesController.getInstance(currentAccount).getUser(message.getSenderId());
-            if (fromUser != null) {
-                sb.append(ContactsController.formatName(fromUser.first_name, fromUser.last_name));
-                sb.append(". ");
-            }
-        }
-        if (encryptedChat == null) {
-            sb.append(message.messageText);
-            if (!message.isMediaEmpty()) {
-                if (!TextUtils.isEmpty(message.caption)) {
+            } else {
+                if (encryptedChat != null) {
+                    sb.append(LocaleController.getString("AccDescrSecretChat", R.string.AccDescrSecretChat));
                     sb.append(". ");
-                    sb.append(message.caption);
+                }
+                if (user != null) {
+                    if (UserObject.isReplyUser(user)) {
+                        sb.append(LocaleController.getString("RepliesTitle", R.string.RepliesTitle));
+                    } else {
+                        if (user.bot) {
+                            sb.append(LocaleController.getString("Bot", R.string.Bot));
+                            sb.append(". ");
+                        }
+                        if (user.self) {
+                            sb.append(LocaleController.getString("SavedMessages", R.string.SavedMessages));
+                        } else {
+                            sb.append(ContactsController.formatName(user.first_name, user.last_name));
+                        }
+                    }
+                    sb.append(". ");
+                } else if (chat != null) {
+                    if (chat.broadcast) {
+                        sb.append(LocaleController.getString("AccDescrChannel", R.string.AccDescrChannel));
+                    } else {
+                        sb.append(LocaleController.getString("AccDescrGroup", R.string.AccDescrGroup));
+                    }
+                    sb.append(". ");
+                    sb.append(chat.title);
+                    sb.append(". ");
                 }
             }
+            if (unreadCount > 0) {
+                sb.append(LocaleController.formatPluralString("NewMessages", unreadCount));
+                sb.append(". ");
+            }
+            if (message == null || currentDialogFolderId != 0) {
+                info.setContentDescription(sb.toString());
+                return;
+            }
+            int lastDate = lastMessageDate;
+            if (lastMessageDate == 0) {
+                lastDate = message.messageOwner.date;
+            }
+            String date = LocaleController.formatDateAudio(lastDate, true);
+            if (message.isOut()) {
+                sb.append(LocaleController.formatString("AccDescrSentDate", R.string.AccDescrSentDate, date));
+            } else {
+                sb.append(LocaleController.formatString("AccDescrReceivedDate", R.string.AccDescrReceivedDate, date));
+            }
+            sb.append(". ");
+            if (chat != null && !message.isOut() && message.isFromUser() && message.messageOwner.action == null) {
+                TLRPC.User fromUser = MessagesController.getInstance(currentAccount).getUser(message.getSenderId());
+                if (fromUser != null) {
+                    sb.append(ContactsController.formatName(fromUser.first_name, fromUser.last_name));
+                    sb.append(". ");
+                }
+            }
+            if (encryptedChat == null) {
+                sb.append(message.messageText);
+                if (!message.isMediaEmpty()) {
+                    if (!TextUtils.isEmpty(message.caption)) {
+                        sb.append(". ");
+                        sb.append(message.caption);
+                    }
+                }
+            }
+            info.setContentDescription(sb.toString());
         }
-        event.setContentDescription(sb.toString());
     }
 
     public void setClipProgress(float value) {

@@ -57,8 +57,6 @@ import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.IBinder;
-import androidx.annotation.Nullable;
-
 import android.os.PowerManager;
 import android.os.SystemClock;
 import android.os.Vibrator;
@@ -79,6 +77,10 @@ import android.view.WindowManager;
 import android.widget.RemoteViews;
 import android.widget.Toast;
 
+import androidx.annotation.Nullable;
+
+import com.google.android.exoplayer2.util.Log;
+
 import org.json.JSONObject;
 import org.telegram.messenger.AccountInstance;
 import org.telegram.messenger.AndroidUtilities;
@@ -91,6 +93,7 @@ import org.telegram.messenger.FileLoader;
 import org.telegram.messenger.FileLog;
 import org.telegram.messenger.ImageLoader;
 import org.telegram.messenger.LocaleController;
+import org.telegram.messenger.MediaController;
 import org.telegram.messenger.MessageObject;
 import org.telegram.messenger.MessagesController;
 import org.telegram.messenger.MessagesStorage;
@@ -104,6 +107,7 @@ import org.telegram.messenger.UserObject;
 import org.telegram.messenger.Utilities;
 import org.telegram.messenger.XiaomiUtilities;
 import org.telegram.tgnet.ConnectionsManager;
+import org.telegram.tgnet.RequestDelegate;
 import org.telegram.tgnet.TLObject;
 import org.telegram.tgnet.TLRPC;
 import org.telegram.ui.ActionBar.BottomSheet;
@@ -812,6 +816,10 @@ public class VoIPService extends Service implements SensorEventListener, AudioMa
 		return START_NOT_STICKY;
 	}
 
+	public static boolean hasRtmpStream() {
+		return getSharedInstance() != null && getSharedInstance().groupCall != null && getSharedInstance().groupCall.call.rtmp_stream;
+	}
+
 	public static VoIPService getSharedInstance() {
 		return sharedInstance;
 	}
@@ -1405,7 +1413,7 @@ public class VoIPService extends Service implements SensorEventListener, AudioMa
 			currentGroupModeStreaming = newModeStreaming;
 			try {
 				if (newModeStreaming) {
-					tgVoip[CAPTURE_DEVICE_CAMERA].prepareForStream();
+					tgVoip[CAPTURE_DEVICE_CAMERA].prepareForStream(groupCall.call != null && groupCall.call.rtmp_stream);
 				} else {
 					tgVoip[CAPTURE_DEVICE_CAMERA].setJoinResponsePayload(myParams.data);
 				}
@@ -1886,11 +1894,11 @@ public class VoIPService extends Service implements SensorEventListener, AudioMa
 	private int checkRequestId;
 
 	private void startGroupCheckShortpoll() {
-		if (shortPollRunnable != null || sharedInstance == null || groupCall == null || mySource[CAPTURE_DEVICE_CAMERA] == 0 && mySource[CAPTURE_DEVICE_SCREEN] == 0) {
+		if (shortPollRunnable != null || sharedInstance == null || groupCall == null || (mySource[CAPTURE_DEVICE_CAMERA] == 0 && mySource[CAPTURE_DEVICE_SCREEN] == 0 && !(groupCall.call != null && groupCall.call.rtmp_stream))) {
 			return;
 		}
 		AndroidUtilities.runOnUIThread(shortPollRunnable = () -> {
-			if (shortPollRunnable == null || sharedInstance == null || groupCall == null || mySource[CAPTURE_DEVICE_CAMERA] == 0 && mySource[CAPTURE_DEVICE_SCREEN] == 0) {
+			if (shortPollRunnable == null || sharedInstance == null || groupCall == null || (mySource[CAPTURE_DEVICE_CAMERA] == 0 && mySource[CAPTURE_DEVICE_SCREEN] == 0 && !(groupCall.call != null && groupCall.call.rtmp_stream))) {
 				return;
 			}
 			TLRPC.TL_phone_checkGroupCall req = new TLRPC.TL_phone_checkGroupCall();
@@ -1932,7 +1940,7 @@ public class VoIPService extends Service implements SensorEventListener, AudioMa
 				if (recreateScreenCapture) {
 					createGroupInstance(CAPTURE_DEVICE_SCREEN, false);
 				}
-				if (mySource[CAPTURE_DEVICE_SCREEN] != 0 || mySource[CAPTURE_DEVICE_CAMERA] != 0) {
+				if (mySource[CAPTURE_DEVICE_SCREEN] != 0 || mySource[CAPTURE_DEVICE_CAMERA] != 0 || (groupCall.call != null && groupCall.call.rtmp_stream)) {
 					startGroupCheckShortpoll();
 				}
 			}));
@@ -2122,6 +2130,37 @@ public class VoIPService extends Service implements SensorEventListener, AudioMa
 						currentStreamRequestTimestamp.remove(key);
 					}
 				});
+			}, taskPtr -> {
+				if (groupCall != null && groupCall.call != null && groupCall.call.rtmp_stream) {
+					TLRPC.TL_phone_getGroupCallStreamChannels req = new TLRPC.TL_phone_getGroupCallStreamChannels();
+					req.call = groupCall.getInputGroupCall();
+					if (groupCall == null || groupCall.call == null || tgVoip[type] == null) {
+						if (tgVoip[type] != null) {
+							tgVoip[type].onRequestTimeComplete(taskPtr, 0);
+						}
+						return;
+					}
+					ConnectionsManager.getInstance(currentAccount).sendRequest(req, (response, error, responseTime) -> {
+						long currentTime = 0;
+						if (error == null) {
+							TLRPC.TL_phone_groupCallStreamChannels res = (TLRPC.TL_phone_groupCallStreamChannels) response;
+							if (!res.channels.isEmpty()) {
+								currentTime = res.channels.get(0).last_timestamp_ms;
+							}
+							if (!groupCall.loadedRtmpStreamParticipant) {
+								groupCall.createRtmpStreamParticipant(res.channels);
+								groupCall.loadedRtmpStreamParticipant = true;
+							}
+						}
+						if (tgVoip[type] != null) {
+							tgVoip[type].onRequestTimeComplete(taskPtr, currentTime);
+						}
+					}, ConnectionsManager.RequestFlagFailOnServerErrors, ConnectionsManager.ConnectionTypeDownload, groupCall.call.stream_dc_id);
+				} else {
+					if (tgVoip[type] != null) {
+						tgVoip[type].onRequestTimeComplete(taskPtr, ConnectionsManager.getInstance(currentAccount).getCurrentTimeMillis());
+					}
+				}
 			});
 			tgVoip[type].setOnStateUpdatedListener((state, inTransition) -> updateConnectionState(type, state, inTransition));
 		}
@@ -2849,7 +2888,13 @@ public class VoIPService extends Service implements SensorEventListener, AudioMa
 		if (photo != null) {
 			builder.setLargeIcon(photo);
 		}
-		startForeground(ID_ONGOING_CALL_NOTIFICATION, builder.getNotification());
+		try {
+			startForeground(ID_ONGOING_CALL_NOTIFICATION, builder.getNotification());
+		} catch (Exception e) {
+			if (photo != null && e instanceof IllegalArgumentException) {
+				showNotification(name, null);
+			}
+		}
 	}
 
 	private void startRingtoneAndVibration(long chatID) {
@@ -3501,13 +3546,28 @@ public class VoIPService extends Service implements SensorEventListener, AudioMa
 		if (BuildVars.LOGS_ENABLED) {
 			FileLog.d("configureDeviceForCall, route to set = " + audioRouteToSet);
 		}
+
+		if (Build.VERSION.SDK_INT >= 21) {
+			WebRtcAudioTrack.setAudioTrackUsageAttribute(hasRtmpStream() ? AudioAttributes.USAGE_MEDIA : AudioAttributes.USAGE_VOICE_COMMUNICATION);
+			WebRtcAudioTrack.setAudioStreamType(hasRtmpStream() ? AudioManager.USE_DEFAULT_STREAM_TYPE : AudioManager.STREAM_VOICE_CALL);
+		}
+
 		needPlayEndSound = true;
 		AudioManager am = (AudioManager) getSystemService(AUDIO_SERVICE);
 		if (!USE_CONNECTION_SERVICE) {
 			Utilities.globalQueue.postRunnable(() -> {
 				if(currentStreamType == AudioManager.STREAM_VOICE_CALL) {
 					try {
-						am.setMode(AudioManager.MODE_IN_COMMUNICATION);
+						if (hasRtmpStream()) {
+						am.setMode(AudioManager.MODE_NORMAL);
+						am.setBluetoothScoOn(false);
+						AndroidUtilities.runOnUIThread(() -> {
+							if (!MediaController.getInstance().isMessagePaused()) {
+								MediaController.getInstance().pauseMessage(MediaController.getInstance().getPlayingMessageObject());
+							}
+						});
+						return;
+					}am.setMode(AudioManager.MODE_IN_COMMUNICATION);
 					} catch (Exception e) {
 						FileLog.e(e);
 					}
@@ -3655,20 +3715,24 @@ public class VoIPService extends Service implements SensorEventListener, AudioMa
 				if (BuildVars.LOGS_ENABLED) {
 					FileLog.d("SCO already active, setting audio routing");
 				}
-				am.setSpeakerphoneOn(false);
-				am.setBluetoothScoOn(true);
+				if (!hasRtmpStream()) {
+					am.setSpeakerphoneOn(false);
+					am.setBluetoothScoOn(true);
+				}
 			} else {
 				if (BuildVars.LOGS_ENABLED) {
 					FileLog.d("startBluetoothSco");
 				}
-				needSwitchToBluetoothAfterScoActivates = true;
-				AndroidUtilities.runOnUIThread(() -> {
-					try {
-						am.startBluetoothSco();
-					} catch (Throwable ignore) {
+				if (!hasRtmpStream()) {
+					needSwitchToBluetoothAfterScoActivates = true;
+					AndroidUtilities.runOnUIThread(() -> {
+						try {
+							am.startBluetoothSco();
+						} catch (Throwable ignore) {
 
-					}
-				}, 500);
+						}
+					}, 500);
+				}
 			}
 		} else {
 			bluetoothScoActive = false;
@@ -4200,6 +4264,9 @@ public class VoIPService extends Service implements SensorEventListener, AudioMa
 	}
 
 	public void updateOutputGainControlState() {
+		if (hasRtmpStream()) {
+			return;
+		}
 		if (tgVoip[CAPTURE_DEVICE_CAMERA] != null) {
 			if (!USE_CONNECTION_SERVICE) {
 				final AudioManager am = (AudioManager) getSystemService(AUDIO_SERVICE);

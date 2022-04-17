@@ -57,6 +57,8 @@ public class NekoConfig {
     public static ConfigItem nameOrder = addConfig("NameOrder", configTypeInt, 1);
     public static ConfigItem mapPreviewProvider = addConfig("MapPreviewProvider", configTypeInt, 0);
     public static ConfigItem transparentStatusBar = addConfig("TransparentStatusBar", configTypeBool, false);
+    public static ConfigItem forceBlurInChat = addConfig("forceBlurInChat", configTypeBool, false);
+    public static ConfigItem chatBlueAlphaValue = addConfig("forceBlurInChatAlphaValue", configTypeInt, 127);
     public static ConfigItem hideProxySponsorChannel = addConfig("HideProxySponsorChannel", configTypeBool, false);
     public static ConfigItem showAddToSavedMessages = addConfig("showAddToSavedMessages", configTypeBool, true);
     public static ConfigItem showReport = addConfig("showReport", configTypeBool, true);
@@ -111,7 +113,7 @@ public class NekoConfig {
     public static ConfigItem skipOpenLinkConfirm = addConfig("SkipOpenLinkConfirm", configTypeBool, false);
 
     public static ConfigItem ignoreMutedCount = addConfig("IgnoreMutedCount", configTypeBool, true);
-    public static ConfigItem useDefaultTheme = addConfig("UseDefaultTheme", configTypeBool, false);
+//    public static ConfigItem useDefaultTheme = addConfig("UseDefaultTheme", configTypeBool, false);
     public static ConfigItem showIdAndDc = addConfig("ShowIdAndDc", configTypeBool, false);
 
     public static ConfigItem googleCloudTranslateKey = addConfig("GoogleCloudTransKey", configTypeString, "");
@@ -368,8 +370,8 @@ public class NekoConfig {
 
         if (preferences.contains("ignore_muted_count"))
             ignoreMutedCount.setConfigBool(preferences.getBoolean("ignore_muted_count", true));
-        if (preferences.contains("use_default_theme"))
-            useDefaultTheme.setConfigBool(preferences.getBoolean("use_default_theme", false));
+//        if (preferences.contains("use_default_theme"))
+//            useDefaultTheme.setConfigBool(preferences.getBoolean("use_default_theme", false));
         if (preferences.contains("show_id_and_dc"))
             showIdAndDc.setConfigBool(preferences.getBoolean("show_id_and_dc", false));
 

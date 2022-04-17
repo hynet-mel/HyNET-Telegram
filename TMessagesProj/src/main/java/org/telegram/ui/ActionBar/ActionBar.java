@@ -16,6 +16,7 @@ import android.app.Activity;
 import android.content.Context;
 import android.content.res.Configuration;
 import android.graphics.Canvas;
+import android.graphics.Color;
 import android.graphics.Paint;
 import android.graphics.PorterDuff;
 import android.graphics.PorterDuffColorFilter;
@@ -41,8 +42,11 @@ import android.view.ViewPropertyAnimator;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
 
+import androidx.core.graphics.ColorUtils;
+
 import org.telegram.messenger.AndroidUtilities;
 import org.telegram.messenger.LocaleController;
+import org.telegram.messenger.NotificationCenter;
 import org.telegram.messenger.R;
 import org.telegram.messenger.SharedConfig;
 import org.telegram.ui.Adapters.FiltersView;
@@ -256,6 +260,7 @@ public class ActionBar extends FrameLayout {
                     int y = titleView.getTextStartY() + Theme.getCurrentHolidayDrawableYOffset() + (int) Math.ceil((titleView.getTextHeight() - rect.height()) / 2.0f);
                     drawable.setBounds(x, y - drawable.getIntrinsicHeight(), x + drawable.getIntrinsicWidth(), y);
                     drawable.setAlpha((int) (255 * titleView.getAlpha()));
+                    drawable.setColorFilter(textPaint.getColor(), PorterDuff.Mode.MULTIPLY);
                     drawable.draw(canvas);
                     if (overlayTitleAnimationInProgress) {
                         child.invalidate();
@@ -511,10 +516,10 @@ public class ActionBar extends FrameLayout {
 
             @Override
             protected void dispatchDraw(Canvas canvas) {
-                if (blurredBackground) {
+                if (blurredBackground && drawBlur) {
                     rectTmp.set(0, 0, getMeasuredWidth(), getMeasuredHeight());
                     blurScrimPaint.setColor(actionModeColor);
-                    contentView.drawBlur(canvas, 0, rectTmp, blurScrimPaint, true);
+                    contentView.drawBlurRect(canvas, 0, rectTmp, blurScrimPaint, true);
                 }
                 super.dispatchDraw(canvas);
             }
@@ -601,7 +606,7 @@ public class ActionBar extends FrameLayout {
                 animators.add(ObjectAnimator.ofFloat(actionModeTop, View.ALPHA, 0.0f, 1.0f));
             }
             if (SharedConfig.noStatusBar) {
-                if (AndroidUtilities.computePerceivedBrightness(actionModeColor) < 0.721f) {
+                if (ColorUtils.calculateLuminance(actionModeColor) < 0.7f) {
                     AndroidUtilities.setLightStatusBar(((Activity) getContext()).getWindow(), false);
                 } else {
                     AndroidUtilities.setLightStatusBar(((Activity) getContext()).getWindow(), true);
@@ -685,7 +690,7 @@ public class ActionBar extends FrameLayout {
                 actionModeTop.setAlpha(1.0f);
             }
             if (SharedConfig.noStatusBar) {
-                if (AndroidUtilities.computePerceivedBrightness(actionModeColor) < 0.721f) {
+                if (ColorUtils.calculateLuminance(actionModeColor) < 0.7f) {
                     AndroidUtilities.setLightStatusBar(((Activity) getContext()).getWindow(), false);
                 } else {
                     AndroidUtilities.setLightStatusBar(((Activity) getContext()).getWindow(), true);
@@ -750,10 +755,14 @@ public class ActionBar extends FrameLayout {
             animators.add(ObjectAnimator.ofFloat(actionModeTop, View.ALPHA, 0.0f));
         }
         if (SharedConfig.noStatusBar) {
-            if (AndroidUtilities.computePerceivedBrightness(actionBarColor) < 0.721f) {
-                AndroidUtilities.setLightStatusBar(((Activity) getContext()).getWindow(), false);
+            if (actionBarColor == 0) {
+                NotificationCenter.getGlobalInstance().postNotificationName(NotificationCenter.needCheckSystemBarColors);
             } else {
-                AndroidUtilities.setLightStatusBar(((Activity) getContext()).getWindow(), true);
+                if (ColorUtils.calculateLuminance(actionBarColor) < 0.7f) {
+                    AndroidUtilities.setLightStatusBar(((Activity) getContext()).getWindow(), false);
+                } else {
+                    AndroidUtilities.setLightStatusBar(((Activity) getContext()).getWindow(), true);
+                }
             }
         }
         if (actionModeAnimation != null) {
@@ -827,6 +836,12 @@ public class ActionBar extends FrameLayout {
     public void setSearchTextColor(int color, boolean placeholder) {
         if (menu != null) {
             menu.setSearchTextColor(color, placeholder);
+        }
+    }
+
+    public void setSearchCursorColor(int color) {
+        if (menu != null) {
+            menu.setSearchCursorColor(color);
         }
     }
 
@@ -958,7 +973,14 @@ public class ActionBar extends FrameLayout {
         if (menu == null || text == null) {
             return;
         }
-        menu.openSearchField(!isSearchFieldVisible, text, animated);
+        menu.openSearchField(!isSearchFieldVisible, !isSearchFieldVisible, text, animated);
+    }
+
+    public void openSearchField(boolean animated) {
+        if (menu == null) {
+            return;
+        }
+        menu.openSearchField(!isSearchFieldVisible, false, "", animated);
     }
 
     public void setSearchFilter(FiltersView.MediaFilterData filter) {
@@ -1460,7 +1482,7 @@ public class ActionBar extends FrameLayout {
         super.onAttachedToWindow();
         ellipsizeSpanAnimator.onAttachedToWindow();
         if (SharedConfig.noStatusBar && actionModeVisible) {
-            if (AndroidUtilities.computePerceivedBrightness(actionModeColor) < 0.721f) {
+            if (ColorUtils.calculateLuminance(actionModeColor) < 0.7f) {
                 AndroidUtilities.setLightStatusBar(((Activity) getContext()).getWindow(), false);
             } else {
                 AndroidUtilities.setLightStatusBar(((Activity) getContext()).getWindow(), true);
@@ -1473,10 +1495,14 @@ public class ActionBar extends FrameLayout {
         super.onDetachedFromWindow();
         ellipsizeSpanAnimator.onDetachedFromWindow();
         if (SharedConfig.noStatusBar && actionModeVisible) {
-            if (AndroidUtilities.computePerceivedBrightness(actionBarColor) < 0.721f) {
-                AndroidUtilities.setLightStatusBar(((Activity) getContext()).getWindow(), false);
+            if (actionBarColor == 0) {
+                NotificationCenter.getGlobalInstance().postNotificationName(NotificationCenter.needCheckSystemBarColors);
             } else {
-                AndroidUtilities.setLightStatusBar(((Activity) getContext()).getWindow(), true);
+                if (ColorUtils.calculateLuminance(actionBarColor) < 0.7f) {
+                    AndroidUtilities.setLightStatusBar(((Activity) getContext()).getWindow(), false);
+                } else {
+                    AndroidUtilities.setLightStatusBar(((Activity) getContext()).getWindow(), true);
+                }
             }
         }
     }
@@ -1573,14 +1599,14 @@ public class ActionBar extends FrameLayout {
         setBackground(null);
     }
 
-    Paint blurScrimPaint = new Paint();
+    public Paint blurScrimPaint = new Paint();
     Rect rectTmp = new Rect();
     @Override
     protected void dispatchDraw(Canvas canvas) {
-        if (blurredBackground) {
+        if (blurredBackground && actionBarColor != Color.TRANSPARENT) {
             rectTmp.set(0, 0, getMeasuredWidth(), getMeasuredHeight());
             blurScrimPaint.setColor(actionBarColor);
-            contentView.drawBlur(canvas, 0, rectTmp, blurScrimPaint, true);
+            contentView.drawBlurRect(canvas, getY(), rectTmp, blurScrimPaint, true);
         }
         super.dispatchDraw(canvas);
     }
