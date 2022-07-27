@@ -124,6 +124,7 @@ public class NotificationCenter {
     public static final int stickersImportComplete = totalEvents++;
     public static final int dialogDeleted = totalEvents++;
     public static final int webViewResultSent = totalEvents++;
+    public static final int voiceTranscriptionUpdate = totalEvents++;
 
     public static final int didGenerateFingerprintKeyPair = totalEvents++;
 
@@ -246,6 +247,12 @@ public class NotificationCenter {
     public static final int onActivityResultReceived = totalEvents++;
     public static final int onRequestPermissionResultReceived = totalEvents++;
     public static final int onUserRingtonesUpdated = totalEvents++;
+    public static final int currentUserPremiumStatusChanged = totalEvents++;
+    public static final int premiumPromoUpdated = totalEvents++;
+    public static final int premiumStatusChangedGlobal = totalEvents++;
+    public static final int currentUserShowLimitReachedDialog = totalEvents++;
+    public static final int billingProductDetailsUpdated = totalEvents++;
+    public static final int premiumStickersPreviewLoaded = totalEvents++;
 
     // custom
 
@@ -501,7 +508,7 @@ public class NotificationCenter {
             DelayedPost delayedPost = new DelayedPost(id, args);
             delayedPosts.add(delayedPost);
             if (BuildVars.LOGS_ENABLED) {
-                FileLog.e("delay post notification " + id + " with args count = " + args.length);
+                FileLog.d("delay post notification " + id + " with args count = " + args.length);
             }
             return;
         }
