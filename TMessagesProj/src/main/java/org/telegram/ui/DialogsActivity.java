@@ -148,6 +148,7 @@ import org.telegram.ui.Cells.UserCell;
 import org.telegram.ui.Components.AlertsCreator;
 import org.telegram.ui.Components.AnimationProperties;
 import org.telegram.ui.Components.AvatarDrawable;
+import org.telegram.ui.Components.BackButtonMenu;
 import org.telegram.ui.Components.BackupImageView;
 import org.telegram.ui.Components.BlurredRecyclerView;
 import org.telegram.ui.Components.Bulletin;
@@ -2285,6 +2286,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                 actionBar.setBackButtonDrawable(backDrawable = new BackDrawable(false));
             } else {
                 actionBar.setBackButtonDrawable(menuDrawable = new MenuDrawable());
+                menuDrawable.setRoundCap();
                 actionBar.setBackButtonContentDescription(LocaleController.getString("AccDescrOpenMenu", R.string.AccDescrOpenMenu));
             }
             if (folderId != 0) {
@@ -3502,7 +3504,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
             contentView.setClipToPadding(false);
             commentView.allowBlur = false;
             commentView.forceSmoothKeyboard(true);
-            commentView.setAllowStickersAndGifs(false, false);
+            commentView.setAllowStickersAndGifs(true, false, false);
             commentView.setForceShowSendButton(true, false);
             commentView.setPadding(0, 0, AndroidUtilities.dp(20), 0);
             commentView.setVisibility(View.GONE);
@@ -3874,6 +3876,58 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
         } else {
             showSearch(false, false, false);
         }
+        View backButton = actionBar.getBackButton();
+        backButton.setOnLongClickListener(e -> {
+            scrimPopupWindow = BackButtonMenu.showHistory(this, backButton);
+            final ActionBarPopupWindow scrimPopupWindowBack = scrimPopupWindow;
+            if (scrimPopupWindow != null) {
+                scrimPopupWindow.setOnDismissListener(() -> {
+                    if (scrimPopupWindow != scrimPopupWindowBack) {
+                        return;
+                    }
+                    if (scrimAnimatorSet != null) {
+                        scrimAnimatorSet.cancel();
+                        scrimAnimatorSet = null;
+                    }
+                    scrimAnimatorSet = new AnimatorSet();
+                    scrimViewAppearing = false;
+                    ArrayList<Animator> animators = new ArrayList<>();
+                    animators.add(ObjectAnimator.ofInt(scrimPaint, AnimationProperties.PAINT_ALPHA, 0));
+                    scrimAnimatorSet.playTogether(animators);
+                    scrimAnimatorSet.setDuration(220);
+                    scrimAnimatorSet.addListener(new AnimatorListenerAdapter() {
+                        @Override
+                        public void onAnimationEnd(Animator animation) {
+                            if (scrimView != null) {
+                                scrimView.setBackground(null);
+                                scrimView = null;
+                            }
+                            if (fragmentView != null) {
+                                fragmentView.invalidate();
+                            }
+                        }
+                    });
+                    scrimAnimatorSet.start();
+                    scrimPopupWindow = null;
+                    scrimPopupWindowItems = null;
+                });
+                if (scrimAnimatorSet != null) {
+                    scrimAnimatorSet.cancel();
+                } else {
+                    scrimAnimatorSet = new AnimatorSet();
+                }
+                fragmentView.invalidate();
+                scrimViewAppearing = true;
+                ArrayList<Animator> animators = new ArrayList<>();
+                animators.add(ObjectAnimator.ofInt(scrimPaint, AnimationProperties.PAINT_ALPHA, 0, 50));
+                scrimAnimatorSet.playTogether(animators);
+                scrimAnimatorSet.setDuration(150);
+                scrimAnimatorSet.start();
+                return true;
+            } else {
+                return false;
+            }
+        });
 
         updateMenuButton(false);
         actionBar.setDrawBlurBackground(contentView);
@@ -4273,8 +4327,10 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                 updateFilterTabsVisibility(animated);
                 int id = filterTabsView.getCurrentTabId();
                 int stableId = filterTabsView.getCurrentTabStableId();
+                boolean selectWithStableId = false;
                 if (id != filterTabsView.getDefaultTabId() && id >= filters.size()) {
                     filterTabsView.resetTabId();
+                    selectWithStableId = true;
                 }
                 filterTabsView.removeTabs();
                 for (int a = 0, N = filters.size(); a < N; a++) {
@@ -4300,6 +4356,9 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                     if (filterTabsView.getStableId(viewPages[0].selectedType) != stableId) {
                         updateCurrentTab = true;
                         viewPages[0].selectedType = id;
+                    }
+                    if (selectWithStableId) {
+                        filterTabsView.selectTabWithStableId(stableId);
                     }
                 }
                 for (int a = 0; a < viewPages.length; a++) {

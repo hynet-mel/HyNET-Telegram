@@ -44,6 +44,7 @@ public class NekoConfig {
 
     public static ConfigItem enablePublicProxy = addConfig("enablePublicProxy", configTypeBool, true);
     public static ConfigItem autoUpdateSubInfo = addConfig("autoUpdateSubInfo", configTypeBool, true);
+    public static ConfigItem lastUpdateCheckTime = addConfig("lastUpdateCheckTime", configTypeLong, 0L);
 
     // From NekoConfig
     public static ConfigItem useIPv6 = addConfig("IPv6", configTypeBool, false);
@@ -184,6 +185,9 @@ public class NekoConfig {
     public static ConfigItem useMediaStreamInVoip = addConfig("UseMediaStreamInVoip", configTypeBool, false);
     public static ConfigItem customAudioBitrate = addConfig("customAudioBitrate", configTypeInt, 32);
     public static ConfigItem disableGroupVoipAudioProcessing = addConfig("disableGroupVoipAudioProcessing", configTypeBool, false);
+    public static ConfigItem enhancedFileLoader = addConfig("enhancedFileLoader", configTypeBool, false);
+    public static ConfigItem useOSMDroidMap = addConfig("useOSMDroidMap", configTypeBool, !BuildVars.isGServicesCompiled);
+    public static ConfigItem mapDriftingFixForGoogleMaps = addConfig("mapDriftingFixForGoogleMaps", configTypeBool, true);
 
     static {
         loadConfig(false);
@@ -466,6 +470,10 @@ public class NekoConfig {
             customAudioBitrate.setConfigInt(preferences.getInt("customAudioBitrate", 32));
         if (preferences.contains("disableGroupVoipAudioProcessing"))
             disableGroupVoipAudioProcessing.setConfigBool(preferences.getBoolean("disableGroupVoipAudioProcessing", false));
+    }
+
+    public static boolean fixDriftingForGoogleMaps() {
+        return BuildVars.isGServicesCompiled && !useOSMDroidMap.Bool() && mapDriftingFixForGoogleMaps.Bool();
     }
 
 }
